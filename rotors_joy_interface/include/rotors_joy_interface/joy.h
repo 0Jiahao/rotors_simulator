@@ -31,9 +31,11 @@ struct Axes {
   int roll;
   int pitch;
   int thrust;
+  int yaw;
   int roll_direction;
   int pitch_direction;
   int thrust_direction;
+  int yaw_direction;
 };
 
 struct Buttons {
@@ -41,8 +43,6 @@ struct Buttons {
   int land;
   int ctrl_enable;
   int ctrl_mode;
-  int yaw_left;
-  int yaw_right;
 };
 
 struct Max {

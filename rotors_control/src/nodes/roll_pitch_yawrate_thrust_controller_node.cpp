@@ -31,7 +31,7 @@ RollPitchYawrateThrustControllerNode::RollPitchYawrateThrustControllerNode() {
 
   cmd_roll_pitch_yawrate_thrust_sub_ = nh.subscribe(kDefaultCommandRollPitchYawrateThrustTopic, 1,
                                      &RollPitchYawrateThrustControllerNode::RollPitchYawrateThrustCallback, this);
-  odometry_sub_ = nh.subscribe(kDefaultOdometryTopic, 1,
+  odometry_sub_ = nh.subscribe(mav_msgs::default_topics::ODOMETRY, 1,
                                &RollPitchYawrateThrustControllerNode::OdometryCallback, this);
 
   motor_velocity_reference_pub_ = nh.advertise<mav_msgs::Actuators>(
