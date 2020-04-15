@@ -64,11 +64,16 @@ void RollPitchYawrateThrustController::CalculateRotorVelocities(Eigen::VectorXd*
   }
 
   Eigen::Vector3d angular_acceleration;
-  ComputeDesiredAngularAcc(&angular_acceleration);
+  Eigen::Vector3d acceleration;
+
+  ComputeDesiredAngularAcc(&acceleration, &angular_acceleration);
+
+  float acc_norm = acceleration.norm();
 
   Eigen::Vector4d angular_acceleration_thrust;
   angular_acceleration_thrust.block<3, 1>(0, 0) = angular_acceleration;
-  angular_acceleration_thrust(3) = roll_pitch_yawrate_thrust_.thrust.z();
+  angular_acceleration_thrust(3) = (roll_pitch_yawrate_thrust_.thrust.z() > 0)?
+                                    acc_norm * vehicle_parameters_.mass_ : -acc_norm * vehicle_parameters_.mass_;
 
   *rotor_velocities = angular_acc_to_rotor_velocities_ * angular_acceleration_thrust;
   *rotor_velocities = rotor_velocities->cwiseMax(Eigen::VectorXd::Zero(rotor_velocities->rows()));
@@ -87,17 +92,39 @@ void RollPitchYawrateThrustController::SetRollPitchYawrateThrust(
 
 // Implementation from the T. Lee et al. paper
 // Control of complex maneuvers for a quadrotor UAV using geometric methods on SE(3)
-void RollPitchYawrateThrustController::ComputeDesiredAngularAcc(Eigen::Vector3d* angular_acceleration) const {
+void RollPitchYawrateThrustController::ComputeDesiredAngularAcc(Eigen::Vector3d* acceleration, Eigen::Vector3d* angular_acceleration) const {
+  assert(acceleration);
   assert(angular_acceleration);
 
   Eigen::Matrix3d R = odometry_.orientation.toRotationMatrix();
-  double yaw = atan2(R(1, 0), R(0, 0));
+
+  Eigen::Vector3d e_3(Eigen::Vector3d::UnitZ());
 
   // Get the desired rotation matrix.
+  Eigen::Vector3d velocity_W =  odometry_.velocity;
+  Eigen::Vector3d velocity_error = velocity_W - Eigen::Vector3d(roll_pitch_yawrate_thrust_.pitch,
+                                                roll_pitch_yawrate_thrust_.roll,
+                                                roll_pitch_yawrate_thrust_.thrust.z());
+
+  Eigen::Vector3d acc = velocity_error.cwiseProduct(controller_parameters_.velocity_gain_) / vehicle_parameters_.mass_ - vehicle_parameters_.gravity_ * e_3;
+
+  *acceleration = acc;
+
+  Eigen::Vector3d b1_des;
+  double yaw = atan2(R(1, 0), R(0, 0));
+  b1_des << cos(yaw), sin(yaw), 0;
+
+  Eigen::Vector3d b3_des;
+  b3_des = -acc / acc.norm();
+
+  Eigen::Vector3d b2_des;
+  b2_des = b3_des.cross(b1_des);
+  b2_des.normalize();
+
   Eigen::Matrix3d R_des;
-  R_des = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ())  // yaw
-        * Eigen::AngleAxisd(roll_pitch_yawrate_thrust_.roll, Eigen::Vector3d::UnitX())  // roll
-        * Eigen::AngleAxisd(roll_pitch_yawrate_thrust_.pitch, Eigen::Vector3d::UnitY());  // pitch
+  R_des.col(0) = b2_des.cross(b3_des);
+  R_des.col(1) = b2_des;
+  R_des.col(2) = b3_des;
 
   // Angle error according to lee et al.
   Eigen::Matrix3d angle_error_matrix = 0.5 * (R_des.transpose() * R - R.transpose() * R_des);
